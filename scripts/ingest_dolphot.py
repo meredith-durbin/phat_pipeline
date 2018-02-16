@@ -70,8 +70,10 @@ def name_columns(colfile):
         imgnames = desc_split.loc[indices_indiv].str[1].str.split(' ').str[0]
         df.loc[indices_total,'colnames'] = filters.str.lower() + '_' + v.lower()
         df.loc[indices_indiv,'colnames'] = imgnames + '_' + v.lower()
+    filters = df.desc[df.desc.str.endswith('sec)')].str.split('\ \(').str[1].str.split(', ').str[0].unique()
+    print('Filters found: {}'.format(filters))
     df = df[df.colnames != '']
-    return df, np.unique(filters)
+    return df, filters
 
 def read_dolphot(photfile, columns_df, filters, to_hdf=False, full=False):
     """Construct a table of column names for dolphot output, with indices
