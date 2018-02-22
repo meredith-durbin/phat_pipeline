@@ -14,6 +14,7 @@ Use
     such:
     ::
         python ingest_dolphot.py ['filebase'] ['--to_hdf'] ['--full']
+    
     Parameters:
     (Required) [filebase] - Path to .phot file, with or without .phot extension.
     (Optional) [--to_hdf] - Whether to write the dataframe to an HDF5 
@@ -53,9 +54,9 @@ colname_mappings = {
 }
 
 def cull_photometry(df, filter_detectors, snrcut=4.,
-                    cut_params={'irsharp':0.15, 'ircrowd':2.25,
-                                'uvissharp':0.15, 'uviscrowd':1.30,
-                                'wfcsharp':0.20, 'wfccrowd':2.25}):
+                    cut_params={'irsharp'   : 0.15, 'ircrowd'   : 2.25,
+                                'uvissharp' : 0.15, 'uviscrowd' : 1.30,
+                                'wfcsharp'  : 0.20, 'wfccrowd'  : 2.25}):
     """Add 'ST' and 'GST' flag columns based on stellar parameters.
 
     TODO:
@@ -83,11 +84,13 @@ def cull_photometry(df, filter_detectors, snrcut=4.,
     """
     for filt in filter_detectors:
         try:
-            d, f = filt.lower().split('-')
+            d, f = filt.lower().split('-') # split into detector + filter
             print('Making ST and GST cuts for {}'.format(f))
+            # make boolean arrays for each set of culling parameters
             snr_condition = df.loc[:,'{}_snr'.format(f)] > snrcut
             sharp_condition = df.loc[:,'{}_sharp'.format(f)]**2 < cut_params['{}sharp'.format(d)]
             crowd_condition = df.loc[:,'{}_crowd'.format(f)] < cut_params['{}crowd'.format(d)]
+            # add st and gst columns
             df.loc[:,'{}_st'.format(f)] = (snr_condition & sharp_condition).astype(bool)
             df.loc[:,'{}_gst'.format(f)] = (df['{}_st'.format(f)] & crowd_condition).astype(bool)
             print('Found {} out of {} stars meeting ST criteria for {}'.format(
@@ -122,6 +125,7 @@ def make_header_table(fitsdir, search_string='*fl?.chip?.fit*'):
     if len(fitslist) == 0: # this shouldn't happen
         print('No fits files found in {}!'.format(fitsdir))
         return pd.DataFrame()
+    # get headers from each image
     for fitsfile in fitslist:
         fitsname = fitsfile.name # filename without preceding path
         head = fits.getheader(fitsfile)
@@ -139,6 +143,7 @@ def make_header_table(fitsdir, search_string='*fl?.chip?.fit*'):
         df.loc[fitsname.split('.fits')[0]] = row.T
     # I do not know why dask is so bad at mixed types
     # but here is my hacky solution
+    df = df.infer_objects()
     df_obj = df.select_dtypes('object')
     # iterate over columns and force types
     for c in df_obj:
@@ -152,7 +157,7 @@ def make_header_table(fitsdir, search_string='*fl?.chip?.fit*'):
         elif dtype == 'boolean':
             df.loc[:,c] = df.loc[:,c].astype(bool)
         else:
-            print('Unrecognized datatype for column {}: {}; converting to string'.format(c, dtype))
+            print('Unrecognized datatype "{}" for column {}; coercing to string'.format(dtype, c))
             df.loc[:,c] = df.loc[:,c].astype(str)
     return df
 
@@ -181,7 +186,9 @@ def name_columns(colfile):
     for k, v in colname_mappings.items():
         indices = df[df.desc.str.find(k) != -1].index
         desc_split = df.loc[indices,'desc'].str.split(", ")
+        # get indices for columns with combined photometry
         indices_total = indices[desc_split.str.len() == 2]
+        # get indices for columns with single-frame photometry
         indices_indiv = indices[desc_split.str.len() > 2]
         filters = desc_split.loc[indices_total].str[-1]
         imgnames = desc_split.loc[indices_indiv].str[1].str.split(' ').str[0]
@@ -189,7 +196,6 @@ def name_columns(colfile):
         df.loc[indices_indiv,'colnames'] = imgnames + '_' + v.lower()
     filters = df.desc[df.desc.str.endswith('sec)')].str.split('\ \(').str[1].str.split(', ').str[0].unique()
     print('Filters found: {}'.format(filters))
-    df = df[df.colnames != '']
     return df, filters
 
 def read_dolphot(photfile, columns_df, filters, to_hdf=False, full=False):
@@ -250,7 +256,7 @@ def read_dolphot(photfile, columns_df, filters, to_hdf=False, full=False):
                    complevel=9, complib='zlib')
         if full:
             for f in filters:
-                print('Writing individual exposure photometry table for filter {}'.format(f))
+                print('Writing single-frame photometry table for filter {}'.format(f))
                 df.filter(regex='_{}_'.format(f)).to_hdf(outfile, key=f, 
                           mode='a', format='table', complevel=9, complib='zlib')
         print('Finished writing HDF5 file')
