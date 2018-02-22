@@ -53,13 +53,18 @@ colname_mappings = {
 }
 
 def cull_photometry(df, filter_detectors, snrcut=4.,
-                    cut_params={'irsharp':0.15,'uvissharp':0.15,'wfcsharp':0.20,
-                                'ircrowd':2.25,'uviscrowd':1.30,'wfccrowd':2.25}):
+                    cut_params={'irsharp':0.15, 'ircrowd':2.25,
+                                'uvissharp':0.15, 'uviscrowd':1.30,
+                                'wfcsharp':0.20, 'wfccrowd':2.25}):
     """Add 'ST' and 'GST' flag columns based on stellar parameters.
+
+    TODO:
+        - Allow for modification by command line
+        - Generalize to more parameters
 
     Inputs
     ------
-    df : DataFrame 
+    df : DataFrame
         table read in by read_dolphot
     filter_detectors : list of strings
         list of detectors + filters in 'detector-filter' format
@@ -68,7 +73,7 @@ def cull_photometry(df, filter_detectors, snrcut=4.,
         default: 4.0
     cut_params : dict
         dictionary of parameters to cut on, with keys in '<detector><quantity>'
-        format and scalar values.
+        format, and scalar values.
 
     Returns
     -------
@@ -84,9 +89,11 @@ def cull_photometry(df, filter_detectors, snrcut=4.,
             sharp_condition = df.loc[:,'{}_sharp'.format(f)]**2 < cut_params['{}sharp'.format(d)]
             crowd_condition = df.loc[:,'{}_crowd'.format(f)] < cut_params['{}crowd'.format(d)]
             df.loc[:,'{}_st'.format(f)] = (snr_condition & sharp_condition).astype(bool)
-            df.loc[:,'{}_gst'.format(f)] = (snr_condition & sharp_condition & crowd_condition).astype(bool)
-            print('Found {} out of {} stars meeting ST criteria for {}'.format(df.loc[:,'{}_st'.format(f)].sum(), df.shape[0], f))
-            print('Found {} out of {} stars meeting GST criteria for {}'.format(df.loc[:,'{}_gst'.format(f)].sum(), df.shape[0], f))
+            df.loc[:,'{}_gst'.format(f)] = (df['{}_st'.format(f)] & crowd_condition).astype(bool)
+            print('Found {} out of {} stars meeting ST criteria for {}'.format(
+                df.loc[:,'{}_st'.format(f)].sum(), df.shape[0], f))
+            print('Found {} out of {} stars meeting GST criteria for {}'.format(
+                df.loc[:,'{}_gst'.format(f)].sum(), df.shape[0], f))
         except Exception:
             print('Could not perform culling for {}.\n{}'.format(f, traceback.format_exc()))
     return df
@@ -112,11 +119,11 @@ def make_header_table(fitsdir, search_string='*fl?.chip?.fit*'):
     keys = []
     headers = {}
     fitslist = list(fitsdir.glob(search_string))
-    if len(fitslist) == 0:
+    if len(fitslist) == 0: # this shouldn't happen
         print('No fits files found in {}!'.format(fitsdir))
         return pd.DataFrame()
     for fitsfile in fitslist:
-        fitsname = fitsfile.name
+        fitsname = fitsfile.name # filename without preceding path
         head = fits.getheader(fitsfile)
         headers.update({fitsname:head})
         keys += [k for k in head.keys()]
@@ -125,11 +132,15 @@ def make_header_table(fitsdir, search_string='*fl?.chip?.fit*'):
     for key in remove_keys:
         if key in unique_keys:
             unique_keys.remove(key)
+    # construct dataframe
     df = pd.DataFrame(columns=unique_keys)
     for fitsname, head in headers.items():
         row = pd.Series(dict(head.items()))
         df.loc[fitsname.split('.fits')[0]] = row.T
+    # I do not know why dask is so bad at mixed types
+    # but here is my hacky solution
     df_obj = df.select_dtypes('object')
+    # iterate over columns and force types
     for c in df_obj:
         dtype = pd.api.types.infer_dtype(df[c], skipna=True)
         if dtype == 'string':
@@ -164,7 +175,9 @@ def name_columns(colfile):
     df = pd.DataFrame(data=np.loadtxt(colfile, delimiter='. ', dtype=str),
                           columns=['index','desc']).drop('index', axis=1)
     df = df.assign(colnames='')
+    # set first 11 column names
     df.loc[:10,'colnames'] = global_columns
+    # set rest of column names
     for k, v in colname_mappings.items():
         indices = df[df.desc.str.find(k) != -1].index
         desc_split = df.loc[indices,'desc'].str.split(", ")
@@ -209,9 +222,11 @@ def read_dolphot(photfile, columns_df, filters, to_hdf=False, full=False):
         HDF5 file containing photometry table
     """
     if not full:
+        # cut individual chip columns before ever reading in .phot file
         columns_df = columns_df[columns_df.colnames.str.find('.chip') == -1]
     colnames = columns_df.colnames
     usecols = columns_df.index
+    # read in dolphot output
     df = dd.read_csv(photfile, delim_whitespace=True, header=None,
                      usecols=usecols, names=colnames,
                      na_values=99.999).compute()
@@ -222,10 +237,14 @@ def read_dolphot(photfile, columns_df, filters, to_hdf=False, full=False):
         header_df = make_header_table(fitsdir)
         header_df.to_hdf(outfile, key='fitsinfo', mode='w', format='table',
                          complevel=9, complib='zlib')
+        # lambda function to construct detector-filter pairs
         lamfunc = lambda x: '-'.join(x[~(x.str.startswith('CLEAR')|x.str.startswith('nan'))])
         filter_detectors = header_df.filter(regex='(DETECTOR)|(FILTER)').astype(str).apply(lamfunc, axis=1).unique()
         print('Writing photometry to {}'.format(outfile))
-        df0 = df[colnames[colnames.str.find(r'.chip') == -1]]
+        if full:
+            df0 = df[colnames[colnames.str.find(r'.chip') == -1]]
+        else:
+            df0 = df
         df0 = cull_photometry(df0, filter_detectors)
         df0.to_hdf(outfile, key='data', mode='a', format='table', 
                    complevel=9, complib='zlib')
