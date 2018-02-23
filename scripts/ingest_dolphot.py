@@ -10,7 +10,7 @@ Authors
 
 Use
 ---
-    This script is inteneded to be executed from the command line as
+    This script is intended to be executed from the command line as
     such:
     ::
         python ingest_dolphot.py ['filebase'] ['--to_hdf'] ['--full']
