@@ -21,6 +21,7 @@ matplotlib.use('Agg') # check this
 import matplotlib.pyplot as plt
 import numpy as np
 import vaex
+
 try:
     import seaborn as sns; sns.set(style='white', font_scale=1.3)
 except ImportError:
@@ -70,6 +71,7 @@ def make_cmd(ds, red_filter, blue_filter, y_filter, n_err=12,
         # idk why you would do this but it's an option
         gst_criteria = gst_criteria & ds['{}_gst'.format(y_filter)]
     # cut dataset down to gst stars
+    # could use ds.select() but i don't like it that much
     ds_gst = ds[gst_criteria]
     # haxx
     xmin = np.nanmin(ds_gst[color].tolist())
