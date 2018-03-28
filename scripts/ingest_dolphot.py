@@ -186,6 +186,7 @@ def name_columns(colfile):
     # set first 11 column names
     df.loc[:10,'colnames'] = global_columns
     # set rest of column names
+    filters_all = []
     for k, v in colname_mappings.items():
         indices = df[df.desc.str.find(k) != -1].index
         desc_split = df.loc[indices,'desc'].str.split(", ")
@@ -195,13 +196,13 @@ def name_columns(colfile):
         indices_indiv = indices[desc_split.str.len() > 2]
         filters = desc_split.loc[indices_total].str[-1].str.replace("'",'')
         imgnames = desc_split.loc[indices_indiv].str[1].str.split(' ').str[0]
+        filters_all.append(filters.values)
         print(filters)
-        print(imgnames)
         df.loc[indices_total,'colnames'] = filters.str.lower() + '_' + v.lower()
         df.loc[indices_indiv,'colnames'] = imgnames + '_' + v.lower()
-    filters_all = df.desc[df.desc.str.endswith('sec)')].str.split('\ \(').str[1].str.split(', ').str[0].unique()
-    print('Filters found: {}'.format(filters_all))
-    return df, filters_all
+    filters_final = np.unique(np.array(filters_all).ravel()) #df.desc[df.desc.str.endswith('sec)')].str.split('\ \(').str[1].str.split(', ').str[0].unique()
+    print('Filters found: {}'.format(filters_final))
+    return df, filters_final
 
 def read_dolphot(photfile, columns_df, filters, to_hdf=False, full=False):
     """Reads in raw dolphot output (.phot file) to a DataFrame with named
