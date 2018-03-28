@@ -143,7 +143,10 @@ def make_header_table(fitsdir, search_string='*fl?.chip?.fit*'):
         df.loc[fitsname.split('.fits')[0]] = row.T
     # I do not know why dask is so bad at mixed types
     # but here is my hacky solution
-    df = df.infer_objects()
+    try:
+        df = df.infer_objects()
+    except Exception:
+        print("Inferring objects didn't work; check your dask version")
     df_obj = df.select_dtypes('object')
     # iterate over columns and force types
     for c in df_obj:
