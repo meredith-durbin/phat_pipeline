@@ -32,7 +32,7 @@ from astropy.io import fits
 from pathlib import Path
 
 # global photometry values
-# these are the first 11 columns in the raw dolphot output
+# first 11 columns in raw dolphot output
 global_columns = ['ext','chip','x','y','chi_gl','snr_gl','sharp_gl', 
                   'round_gl','majax_gl','crowd_gl','objtype_gl']
 
@@ -190,13 +190,13 @@ def name_columns(colfile):
         indices_total = indices[desc_split.str.len() == 2]
         # get indices for columns with single-frame photometry
         indices_indiv = indices[desc_split.str.len() > 2]
-        filters = desc_split.loc[indices_total].str[-1]
+        filters = desc_split.loc[indices_total].str[-1].str.replace("'",'')
         imgnames = desc_split.loc[indices_indiv].str[1].str.split(' ').str[0]
         df.loc[indices_total,'colnames'] = filters.str.lower() + '_' + v.lower()
         df.loc[indices_indiv,'colnames'] = imgnames + '_' + v.lower()
-    filters = df.desc[df.desc.str.endswith('sec)')].str.split('\ \(').str[1].str.split(', ').str[0].unique()
-    print('Filters found: {}'.format(filters))
-    return df, filters
+    filters_all = df.desc[df.desc.str.endswith('sec)')].str.split('\ \(').str[1].str.split(', ').str[0].unique()
+    print('Filters found: {}'.format(filters_all))
+    return df, filters_all
 
 def read_dolphot(photfile, columns_df, filters, to_hdf=False, full=False):
     """Reads in raw dolphot output (.phot file) to a DataFrame with named
