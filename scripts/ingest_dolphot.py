@@ -195,6 +195,8 @@ def name_columns(colfile):
         indices_indiv = indices[desc_split.str.len() > 2]
         filters = desc_split.loc[indices_total].str[-1].str.replace("'",'')
         imgnames = desc_split.loc[indices_indiv].str[1].str.split(' ').str[0]
+        print(filters)
+        print(imgnames)
         df.loc[indices_total,'colnames'] = filters.str.lower() + '_' + v.lower()
         df.loc[indices_indiv,'colnames'] = imgnames + '_' + v.lower()
     filters_all = df.desc[df.desc.str.endswith('sec)')].str.split('\ \(').str[1].str.split(', ').str[0].unique()
