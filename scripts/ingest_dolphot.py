@@ -23,12 +23,14 @@ Use
     individual exposures). Default is False.
 """
 
-import numpy as np
-import pandas as pd
 import dask.dataframe as dd
+import numpy as np
+import os
+import pandas as pd
 import traceback
 
 from astropy.io import fits
+from astropy.wcs import WCS
 from pathlib import Path
 
 # global photometry values
@@ -197,12 +199,45 @@ def name_columns(colfile):
         filters = desc_split.loc[indices_total].str[-1].str.replace("'",'')
         imgnames = desc_split.loc[indices_indiv].str[1].str.split(' ').str[0]
         filters_all.append(filters.values)
-        print(filters)
         df.loc[indices_total,'colnames'] = filters.str.lower() + '_' + v.lower()
         df.loc[indices_indiv,'colnames'] = imgnames + '_' + v.lower()
-    filters_final = np.unique(np.array(filters_all).ravel()) #df.desc[df.desc.str.endswith('sec)')].str.split('\ \(').str[1].str.split(', ').str[0].unique()
+    filters_final = np.unique(np.array(filters_all).ravel())
+    # old : df.desc[df.desc.str.endswith('sec)')].str.split('\ \(').str[1].str.split(', ').str[0].unique()
+    # why did this not work on linux -___-
     print('Filters found: {}'.format(filters_final))
     return df, filters_final
+
+def add_wcs(df, photfile):
+    """Converts x and y columns to world coordinates and inserts them 
+    into the dataframe.
+
+    Inputs
+    ------
+    photfile : path
+        path to raw dolphot output
+    df : DataFrame
+        photometry table read in by read_dolphot
+
+    Returns
+    -------
+    df : DataFrame
+        A table of column descriptions and their corresponding names,
+        with new 'ra' and 'dec' columns added.
+    """
+    drzfiles = glob.glob(photfile + '*_dr?.chip1.fit*')
+    if len(drzfiles) == 0:
+        print('No drizzled files found; not adding RA and Dec')
+        return df
+    elif len(drzfiles) > 1:
+        print('Multiple drizzled files found: {}'.format(drzfiles))
+    drzfile = drzfiles[0]
+    print('Using {} as astrometric reference'.format(drzfile))
+    w = WCS(drzfile)
+    ra, dec = w.all_pix2world(df[['x','y']].values, 0)
+    df.insert(4, 'ra', ra)
+    df.insert(5, 'dec', dec)
+    return df
+
 
 def read_dolphot(photfile, columns_df, filters, to_hdf=False, full=False):
     """Reads in raw dolphot output (.phot file) to a DataFrame with named
@@ -258,12 +293,15 @@ def read_dolphot(photfile, columns_df, filters, to_hdf=False, full=False):
         else:
             df0 = df
         df0 = cull_photometry(df0, filter_detectors)
+        df0 = add_wcs(df0, photfile)
         df0.to_hdf(outfile, key='data', mode='a', format='table', 
                    complevel=9, complib='zlib')
         if full:
+            outfile_full = outfile.replace('.hdf5','_full.hdf5')
+            os.rename(outfile, outfile_full)
             for f in filters:
                 print('Writing single-frame photometry table for filter {}'.format(f))
-                df.filter(regex='_{}_'.format(f)).to_hdf(outfile, key=f, 
+                df.filter(regex='_{}_'.format(f)).to_hdf(outfile_full, key=f, 
                           mode='a', format='table', complevel=9, complib='zlib')
         print('Finished writing HDF5 file')
     else:
