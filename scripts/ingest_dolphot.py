@@ -27,6 +27,7 @@ import dask.dataframe as dd
 import numpy as np
 import os
 import pandas as pd
+print(pd.__version__)
 import traceback
 
 from astropy.io import fits
@@ -149,7 +150,7 @@ def make_header_table(fitsdir, search_string='*fl?.chip?.fit*'):
         df = df.infer_objects()
     except Exception:
         print("Inferring objects didn't work; check your dask version")
-    df_obj = df.select_dtypes('object')
+    df_obj = df.select_dtypes(['object'])
     # iterate over columns and force types
     for c in df_obj:
         dtype = pd.api.types.infer_dtype(df[c], skipna=True)
@@ -224,18 +225,18 @@ def add_wcs(df, photfile):
         A table of column descriptions and their corresponding names,
         with new 'ra' and 'dec' columns added.
     """
-    drzfiles = glob.glob(photfile + '*_dr?.chip1.fit*')
+    drzfiles = list(Path(photfile).parent.glob('*_dr?.chip1.fit*'))
     if len(drzfiles) == 0:
         print('No drizzled files found; not adding RA and Dec')
-        return df
     elif len(drzfiles) > 1:
         print('Multiple drizzled files found: {}'.format(drzfiles))
-    drzfile = drzfiles[0]
-    print('Using {} as astrometric reference'.format(drzfile))
-    w = WCS(drzfile)
-    ra, dec = w.all_pix2world(df[['x','y']].values, 0)
-    df.insert(4, 'ra', ra)
-    df.insert(5, 'dec', dec)
+    else:
+        drzfile = str(drzfiles[0])
+        print('Using {} as astrometric reference'.format(drzfile))
+        w = WCS(drzfile)
+        ra, dec = w.all_pix2world(df.x.values, df.y.values, 0)
+        df.insert(4, 'ra', ra)
+        df.insert(5, 'dec', dec)
     return df
 
 
