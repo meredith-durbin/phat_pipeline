@@ -63,14 +63,16 @@ def cull_photometry(df, filter_detectors, snrcut=4.,
 
     TODO:
         - Allow for modification by command line
-        - Generalize to more parameters
+        - Generalize to more parameters?
+        - Allow to interact with perl...?
 
     Inputs
     ------
     df : DataFrame
         table read in by read_dolphot
     filter_detectors : list of strings
-        list of detectors + filters in 'detector-filter' format
+        list of detectors + filters in 'detector-filter' format,
+        ex. 'WFC-F814W'
     snrcut : scalar, optional
         minimum signal-to-noise ratio for a star to be flagged as 'ST'
         default: 4.0
@@ -208,8 +210,8 @@ def name_columns(colfile):
     return df, filters_final
 
 def add_wcs(df, photfile):
-    """Converts x and y columns to world coordinates and inserts them 
-    into the dataframe.
+    """Converts x and y columns to world coordinates using drizzled file
+    that dolphot uses for astrometry
 
     Inputs
     ------
@@ -225,15 +227,15 @@ def add_wcs(df, photfile):
         with new 'ra' and 'dec' columns added.
     """
     drzfiles = list(Path(photfile).parent.glob('*_dr?.chip1.fit*'))
+    # neither of these should happen but just in case
     if len(drzfiles) == 0:
-        print('No drizzled files found; not adding RA and Dec')
+        print('No drizzled files found; skipping RA and Dec')
     elif len(drzfiles) > 1:
         print('Multiple drizzled files found: {}'.format(drzfiles))
     else:
         drzfile = str(drzfiles[0])
         print('Using {} as astrometric reference'.format(drzfile))
-        w = WCS(drzfile)
-        ra, dec = w.all_pix2world(df.x.values, df.y.values, 0)
+        ra, dec = WCS(drzfile).all_pix2world(df.x.values, df.y.values, 0)
         df.insert(4, 'ra', ra)
         df.insert(5, 'dec', dec)
     return df
@@ -270,6 +272,7 @@ def read_dolphot(photfile, columns_df, filters, to_hdf=False, full=False):
     """
     if not full:
         # cut individual chip columns before ever reading in .phot file
+        # this saves a ton of memory + processing time...maybe
         columns_df = columns_df[columns_df.colnames.str.find('.chip') == -1]
     colnames = columns_df.colnames
     usecols = columns_df.index

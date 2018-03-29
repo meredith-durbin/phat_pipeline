@@ -16,6 +16,10 @@ Use
     Parameters:
     (Required) [fitsdir] - Directory containing FITS files to update.
     (Required) [targname] - Desired target name.
+
+Notes
+-----
+This script is compatible with Python 2.7+.
 """
 
 from __future__ import print_function, division
