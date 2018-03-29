@@ -27,7 +27,6 @@ import dask.dataframe as dd
 import numpy as np
 import os
 import pandas as pd
-print(pd.__version__)
 import traceback
 
 from astropy.io import fits
