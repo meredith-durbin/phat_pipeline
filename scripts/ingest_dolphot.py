@@ -87,8 +87,8 @@ def cull_photometry(df, filter_detectors, snrcut=4.,
         (name format: '<filter>_(g)st')
     """
     for filt in filter_detectors:
+        d, f = filt.lower().split('-') # split into detector + filter
         try:
-            d, f = filt.lower().split('-') # split into detector + filter
             print('Making ST and GST cuts for {}'.format(f))
             # make boolean arrays for each set of culling parameters
             snr_condition = df.loc[:,'{}_snr'.format(f)] > snrcut
@@ -102,10 +102,12 @@ def cull_photometry(df, filter_detectors, snrcut=4.,
             print('Found {} out of {} stars meeting GST criteria for {}'.format(
                 df.loc[:,'{}_gst'.format(f)].sum(), df.shape[0], f))
         except Exception:
+            df.loc[:,'{}_st'.format(f)] = np.nan
+            df.loc[:,'{}_gst'.format(f)] = np.nan
             print('Could not perform culling for {}.\n{}'.format(f, traceback.format_exc()))
     return df
 
-def make_header_table(fitsdir, search_string='*fl?.chip?.fit*'):
+def make_header_table(fitsdir, search_string='*fl?.chip?.fits'):
     """Construct a table of key-value pairs from FITS headers of images
     used in dolphot run. Columns are the set of all keywords that appear
     in any header, and rows are per image.
@@ -116,7 +118,7 @@ def make_header_table(fitsdir, search_string='*fl?.chip?.fit*'):
         directory of FITS files
     search_string : string or regex patter, optional
         string to search for FITS images with. Default is
-        '*fl?.chip?.fit*'
+        '*fl?.chip?.fits'
 
     Returns
     -------
@@ -132,7 +134,7 @@ def make_header_table(fitsdir, search_string='*fl?.chip?.fit*'):
     # get headers from each image
     for fitsfile in fitslist:
         fitsname = fitsfile.name # filename without preceding path
-        head = fits.getheader(fitsfile)
+        head = fits.getheader(fitsfile, ignore_missing_end=True)
         headers.update({fitsname:head})
         keys += [k for k in head.keys()]
     unique_keys = np.unique(keys).tolist()
@@ -150,7 +152,7 @@ def make_header_table(fitsdir, search_string='*fl?.chip?.fit*'):
     try:
         df = df.infer_objects()
     except Exception:
-        print("Inferring objects didn't work; check your dask version")
+        print("Could not infer objects")
     df_obj = df.select_dtypes(['object'])
     # iterate over columns and force types
     for c in df_obj:
@@ -204,8 +206,6 @@ def name_columns(colfile):
         df.loc[indices_total,'colnames'] = filters.str.lower() + '_' + v.lower()
         df.loc[indices_indiv,'colnames'] = imgnames + '_' + v.lower()
     filters_final = np.unique(np.array(filters_all).ravel())
-    # old : df.desc[df.desc.str.endswith('sec)')].str.split('\ \(').str[1].str.split(', ').str[0].unique()
-    # why did this not work on linux -___-
     print('Filters found: {}'.format(filters_final))
     return df, filters_final
 
@@ -226,7 +226,7 @@ def add_wcs(df, photfile):
         A table of column descriptions and their corresponding names,
         with new 'ra' and 'dec' columns added.
     """
-    drzfiles = list(Path(photfile).parent.glob('*_dr?.chip1.fit*'))
+    drzfiles = list(Path(photfile).parent.glob('*_dr?.chip1.fits'))
     # neither of these should happen but just in case
     if len(drzfiles) == 0:
         print('No drizzled files found; skipping RA and Dec')
@@ -271,8 +271,8 @@ def read_dolphot(photfile, columns_df, filters, to_hdf=False, full=False):
         HDF5 file containing photometry table
     """
     if not full:
-        # cut individual chip columns before ever reading in .phot file
-        # this saves a ton of memory + processing time...maybe
+        # cut individual chip columns before reading in .phot file
+        # this saves a ton of memory + processing time
         columns_df = columns_df[columns_df.colnames.str.find('.chip') == -1]
     colnames = columns_df.colnames
     usecols = columns_df.index
@@ -329,6 +329,4 @@ if __name__ == '__main__':
     df = read_dolphot(photfile, columns_df, filters, args.to_hdf, args.full)
     t1 = time.time()
     timedelta = t1 - t0
-    ts = (timedelta % 60)
-    tm = (timedelta - ts)/60
-    print('Finished in {:.0f} m {:.2f} s'.format(tm, ts))
+    print('Finished in {}'.format(str(timedelta)) )
