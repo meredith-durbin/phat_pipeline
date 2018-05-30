@@ -272,7 +272,6 @@ def read_dolphot(photfile, columns_df, filters, to_hdf=False, full=False):
     """
     if not full:
         # cut individual chip columns before reading in .phot file
-        # this saves a ton of memory + processing time
         columns_df = columns_df[columns_df.colnames.str.find('.chip') == -1]
     colnames = columns_df.colnames
     usecols = columns_df.index
