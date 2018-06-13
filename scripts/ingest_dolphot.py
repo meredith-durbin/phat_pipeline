@@ -279,6 +279,7 @@ def read_dolphot(photfile, columns_df, filters, to_hdf=False, full=False):
     df = dd.read_csv(photfile, delim_whitespace=True, header=None,
                      usecols=usecols, names=colnames,
                      na_values=99.999).compute()
+    print(df)
     if to_hdf:
         outfile = photfile + '.hdf5'
         print('Reading in header information from individual images')
@@ -294,6 +295,7 @@ def read_dolphot(photfile, columns_df, filters, to_hdf=False, full=False):
             df0 = df[colnames[colnames.str.find(r'.chip') == -1]]
         else:
             df0 = df
+        print(df0)
         df0 = cull_photometry(df0, filter_detectors)
         df0 = add_wcs(df0, photfile)
         df0.to_hdf(outfile, key='data', mode='a', format='table', 
