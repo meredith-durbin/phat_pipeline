@@ -25,7 +25,8 @@ import vaex
 try:
     import seaborn as sns; sns.set(style='white', font_scale=1.3)
 except ImportError:
-    print('install seaborn you monster')
+    print("It looks like you don't have seaborn installed.")
+    print("This isn't critical, but the plots will look better if you do!")
 
 # need better way to do this
 
@@ -78,9 +79,13 @@ def make_cmd(ds, red_filter, blue_filter, y_filter, n_err=12,
     xmax = np.nanmax(ds_gst[color].tolist())
     ymin = np.nanmin(ds_gst[y_vega].tolist())
     ymax = np.nanmax(ds_gst[y_vega].tolist())
+    dx = xmax - xmin
+    dy = ymax - ymin
     if ds_gst.length() >= 50000:
         fig, ax = plt.subplots(1, figsize=(6.,4.))
-        data_shape = int(np.sqrt(ds_gst.length()))
+        yshape = int(dy/0.04)
+        data_shape = (int(yshape/(dx/dy)),int(yshape))
+        print(data_shape)
         ds_gst.plot(color, y_vega, shape=data_shape,
                     limits=[[xmin,xmax],[ymax,ymin]],
                     **density_kwargs)
@@ -96,6 +101,7 @@ def make_cmd(ds, red_filter, blue_filter, y_filter, n_err=12,
     x_binned = [xmax*0.9]*n_err
     ax.errorbar(x_binned, y_binned, yerr=yerr, xerr=xerr,
                 fmt=',', color='k', lw=1.5)
+    fig.savefig('{}_{}.jpg'.format(blue_filter, red_filter), dpi=144)
 
 
 if __name__ == '__main__':
@@ -106,16 +112,22 @@ if __name__ == '__main__':
 
     photfile = args.filebase
 
-    try:
-        # I have never gotten vaex to read an hdf5 file successfully
-        ds = vaex.open(photfile)
-    except:
-        import pandas as pd
-        df = pd.read_hdf(photfile, key='data')
-        ds = vaex.from_pandas(df)
+    # try:
+    #     # I have never gotten vaex to read an hdf5 file successfully
+    #     ds = vaex.open(photfile)
+    # except:
+    import pandas as pd
+    df = pd.read_hdf(photfile, key='data')
+    ds = vaex.from_pandas(df)
 
-    # how choose filters WHOM KNOWS
-    make_cmd(ds, red_filter, blue_filter, y_filter)
+    filter_sets = [('f336w','f275w','f336w'),
+                   ('f475w','f336w','f475w'),
+                   ('f814w','f475w','f814w'),
+                   ('f160w','f475w','f160w'),
+                   ('f160w','f814w','f160w'),
+                   ('f160w','f110w','f160w')]
+    for f in filter_sets:
+        make_cmd(ds, *f)
 
 
 
