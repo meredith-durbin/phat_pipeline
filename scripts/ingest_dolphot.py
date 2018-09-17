@@ -31,12 +31,13 @@ import traceback
 
 from astropy.io import fits
 from astropy.wcs import WCS
+from multiprocessing import Pool, cpu_count
 from pathlib import Path
 
 # global photometry values
 # first 11 columns in raw dolphot output
-global_columns = ['ext','chip','x','y','chi_gl','snr_gl','sharp_gl', 
-                  'round_gl','majax_gl','crowd_gl','objtype_gl']
+global_columns = ['ext', 'chip', 'x', 'y', 'chi_gl', 'snr_gl', 'sharp_gl', 
+                  'round_gl', 'majax_gl', 'crowd_gl', 'objtype_gl']
 
 # dictionary mapping text in .columns file to column suffix
 colname_mappings = {
@@ -54,6 +55,43 @@ colname_mappings = {
     'Crowding,'                          : 'crowd',
     'Photometry quality flag,'           : 'flag',
 }
+
+def combine_headers(fitsfile):
+    """Scrape information from multiple FITS extension headers.
+    For WFC3/IR images, primary extension 0 and science extension 1; 
+    for WFC3/UVIS and ACS/WFC, primary extension 0 and science 
+    extensions 1 and 4.
+
+    May not work on images that are exactly north-aligned on sky.
+
+    Inputs
+    ------
+    fitsfile : string or Path
+        path to FITS file
+
+    Returns
+    -------
+    fitsname, head : tuple of (string, astropy.io.fits.header)
+        root name of FITS file and combined header object
+    """
+    fitsname = fitsfile.name # filename without preceding path
+    with fits.open(fitsfile) as f:
+        head = f[0].header
+        head1 = f[1].header
+        [head.append(c) for c in head1.cards] # less overlap than .update
+        foot = WCS(head1, fobj=f).calc_footprint()
+        if '_flc' in fitsname:
+            head4 = f[4].header
+            foot4 = WCS(head4, fobj=f).calc_footprint()
+            foot = np.concatenate([foot, foot4])
+            [head.append(c) for c in head4.cards]
+    ra, dec = foot[:,0], foot[:,1]
+    indices = [dec.argmax(), ra.argmin(), dec.argmin(), ra.argmax()]
+    for i,indx in enumerate(indices):
+        head.set(keyword='RA{}'.format(i), value=ra[indx])
+        head.set(keyword='DEC{}'.format(i), value=dec[indx])
+    return fitsname, head
+
 
 def cull_photometry(df, filter_detectors, snrcut=4.,
                     cut_params={'irsharp'   : 0.15, 'ircrowd'   : 2.25,
@@ -116,7 +154,7 @@ def make_header_table(fitsdir, search_string='*fl?.chip?.fits'):
     ------
     fitsdir : Path 
         directory of FITS files
-    search_string : string or regex patter, optional
+    search_string : string or regex pattern, optional
         string to search for FITS images with. Default is
         '*fl?.chip?.fits'
 
@@ -132,16 +170,14 @@ def make_header_table(fitsdir, search_string='*fl?.chip?.fits'):
         print('No fits files found in {}!'.format(fitsdir))
         return pd.DataFrame()
     # get headers from each image
-    for fitsfile in fitslist:
-        fitsname = fitsfile.name # filename without preceding path
-        head = fits.getheader(fitsfile, ignore_missing_end=True)
-        headers.update({fitsname:head})
-        keys += [k for k in head.keys()]
+    with Pool(cpu_count()-1) as p:
+        all_headers = p.map(combine_headers, fitslist)
+    for name, head in all_headers:
+        headers.update({name:head})
+        keys += [k for k in head]
     unique_keys = np.unique(keys).tolist()
     remove_keys = ['COMMENT', 'HISTORY', '']
-    for key in remove_keys:
-        if key in unique_keys:
-            unique_keys.remove(key)
+    [unique_keys.remove(key) for key in remove_keys if key in unique_keys]
     # construct dataframe
     df = pd.DataFrame(columns=unique_keys)
     for fitsname, head in headers.items():
@@ -159,7 +195,7 @@ def make_header_table(fitsdir, search_string='*fl?.chip?.fits'):
         dtype = pd.api.types.infer_dtype(df[c], skipna=True)
         if dtype == 'string':
             df.loc[:,c] = df.loc[:,c].astype(str)
-        elif dtype in ['float','mixed-integer-float']:
+        elif dtype in ['float', 'mixed-integer-float']:
             df.loc[:,c] = df.loc[:,c].astype(float)
         elif dtype == 'integer':
             df.loc[:,c] = df.loc[:,c].astype(int)
@@ -168,6 +204,9 @@ def make_header_table(fitsdir, search_string='*fl?.chip?.fits'):
         else:
             print('Unrecognized datatype "{}" for column {}; coercing to string'.format(dtype, c))
             df.loc[:,c] = df.loc[:,c].astype(str)
+    # lambda function to construct detector-filter pairs
+    lamfunc = lambda x: '-'.join(x[~(x.str.startswith('CLEAR') | x.str.startswith('nan'))])
+    df['FILT_DET'] = df.filter(regex='(DETECTOR)|(FILTER)').astype(str).apply(lamfunc, axis=1)
     return df
 
 def name_columns(colfile):
@@ -187,7 +226,7 @@ def name_columns(colfile):
         List of filters included in output
     """
     df = pd.DataFrame(data=np.loadtxt(colfile, delimiter='. ', dtype=str),
-                          columns=['index','desc']).drop('index', axis=1)
+                          columns=['index', 'desc']).drop('index', axis=1)
     df = df.assign(colnames='')
     # set first 11 column names
     df.loc[:10,'colnames'] = global_columns
@@ -286,9 +325,7 @@ def read_dolphot(photfile, columns_df, filters, to_hdf=False, full=False):
         header_df = make_header_table(fitsdir)
         header_df.to_hdf(outfile, key='fitsinfo', mode='w', format='table',
                          complevel=9, complib='zlib')
-        # lambda function to construct detector-filter pairs
-        lamfunc = lambda x: '-'.join(x[~(x.str.startswith('CLEAR')|x.str.startswith('nan'))])
-        filter_detectors = header_df.filter(regex='(DETECTOR)|(FILTER)').astype(str).apply(lamfunc, axis=1).unique()
+        filter_detectors = header_df.FILT_DET.unique()
         print('Writing photometry to {}'.format(outfile))
         if full:
             df0 = df[colnames[colnames.str.find(r'.chip') == -1]]
@@ -299,7 +336,7 @@ def read_dolphot(photfile, columns_df, filters, to_hdf=False, full=False):
         df0.to_hdf(outfile, key='data', mode='a', format='table', 
                    complevel=9, complib='zlib')
         if full:
-            outfile_full = outfile.replace('.hdf5','_full.hdf5')
+            outfile_full = outfile.replace('.hdf5', '_full.hdf5')
             os.rename(outfile, outfile_full)
             for f in filters:
                 print('Writing single-frame photometry table for filter {}'.format(f))
