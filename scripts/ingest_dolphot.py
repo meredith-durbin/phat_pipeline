@@ -320,7 +320,7 @@ def read_dolphot(photfile, columns_df, filters, to_hdf=False, full=False):
     # read in dolphot output
     df = dd.read_csv(photfile, delim_whitespace=True, header=None,
                      usecols=usecols, names=colnames,
-                     na_values=99.999).replace(99.999, np.nan).compute()
+                     na_values=99.999).compute()
     if to_hdf:
         outfile = photfile + '.hdf5'
         print('Reading in header information from individual images')
