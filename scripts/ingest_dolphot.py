@@ -66,7 +66,7 @@ def combine_headers(fitsfile):
 
     Inputs
     ------
-    fitsfile : string or Path
+    fitsfile : Path
         path to FITS file
 
     Returns
@@ -152,7 +152,7 @@ def make_header_table(fitsdir, search_string='*fl?.chip?.fits'):
 
     Inputs
     ------
-    fitsdir : Path 
+    fitsdir : string or Path 
         directory of FITS files
     search_string : string or regex pattern, optional
         string to search for FITS images with. Default is
@@ -165,6 +165,9 @@ def make_header_table(fitsdir, search_string='*fl?.chip?.fits'):
     """
     keys = []
     headers = {}
+    # force fitsdir to Path
+    if type(fitsdir) == str:
+        fitsdir = Path(fitsdir)
     fitslist = list(fitsdir.glob(search_string))
     if len(fitslist) == 0: # this shouldn't happen
         print('No fits files found in {}!'.format(fitsdir))
@@ -317,7 +320,7 @@ def read_dolphot(photfile, columns_df, filters, to_hdf=False, full=False):
     # read in dolphot output
     df = dd.read_csv(photfile, delim_whitespace=True, header=None,
                      usecols=usecols, names=colnames,
-                     na_values=99.999).compute()
+                     na_values=99.999).replace(99.999, np.nan).compute()
     if to_hdf:
         outfile = photfile + '.hdf5'
         print('Reading in header information from individual images')
