@@ -283,7 +283,7 @@ def add_wcs(df, photfile):
     return df
 
 
-def read_dolphot(photfile, columns_df, filters, to_hdf=False, full=False):
+def read_dolphot(photfile, columns_df, filters, to_hdf=False, full=False, fitsdir=None):
     """Reads in raw dolphot output (.phot file) to a DataFrame with named
     columns, and optionally writes it to a HDF5 file.
 
@@ -324,7 +324,8 @@ def read_dolphot(photfile, columns_df, filters, to_hdf=False, full=False):
     if to_hdf:
         outfile = photfile + '.hdf5'
         print('Reading in header information from individual images')
-        fitsdir = Path(photfile).parent
+        if fitsdir == None:
+            fitsdir = Path(photfile).parent
         header_df = make_header_table(fitsdir)
         header_df.to_hdf(outfile, key='fitsinfo', mode='w', format='table',
                          complevel=9, complib='zlib')
@@ -355,6 +356,7 @@ if __name__ == '__main__':
     parser.add_argument('filebase', action='store')
     parser.add_argument('--to_hdf', dest='to_hdf', action='store_false', required=False)
     parser.add_argument('--full', dest='full', action='store_true', required=False)
+    parser.add_argument('--fitsdir', dest='fitsdir', action='store', default=None, required=False)
     args = parser.parse_args()
     
     photfile = args.filebase if args.filebase.endswith('.phot') else args.filebase + '.phot'
@@ -365,7 +367,7 @@ if __name__ == '__main__':
     
     import time
     t0 = time.time()
-    df = read_dolphot(photfile, columns_df, filters, args.to_hdf, args.full)
+    df = read_dolphot(photfile, columns_df, filters, args.to_hdf, args.full, args.fitsdir)
     t1 = time.time()
     timedelta = t1 - t0
     print('Finished in {}'.format(str(timedelta)) )
