@@ -145,7 +145,7 @@ def cull_photometry(df, filter_detectors, snrcut=4.,
             print('Could not perform culling for {}.\n{}'.format(f, traceback.format_exc()))
     return df
 
-def make_header_table(fitsdir, search_string='*fl?.chip?.fits'):
+def make_header_table(fitsdir, search_string='*fl?.fits'):
     """Construct a table of key-value pairs from FITS headers of images
     used in dolphot run. Columns are the set of all keywords that appear
     in any header, and rows are per image.
